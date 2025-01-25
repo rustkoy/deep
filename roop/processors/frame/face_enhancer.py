@@ -1,6 +1,7 @@
 from typing import Any, List, Callable
 import cv2
 import threading
+import torch
 from gfpgan.utils import GFPGANer
 
 import roop.globals
@@ -22,17 +23,18 @@ def get_face_enhancer() -> Any:
     with THREAD_LOCK:
         if FACE_ENHANCER is None:
             model_path = resolve_relative_path('../models/GFPGANv1.4.pth')
-            # todo: set models path -> https://github.com/TencentARC/GFPGAN/issues/399
-            FACE_ENHANCER = GFPGANer(model_path=model_path, upscale=1, device=get_device())
+            if not torch.cuda.is_available():
+                raise RuntimeError("CUDA is not available. Please check your GPU setup.")
+            FACE_ENHANCER = GFPGANer(model_path=model_path, upscale=1, device='cuda')
     return FACE_ENHANCER
 
 
 def get_device() -> str:
-    if 'CUDAExecutionProvider' in roop.globals.execution_providers:
+    if 'CUDAExecutionProvider' in roop.globals.execution_providers and torch.cuda.is_available():
         return 'cuda'
-    if 'CoreMLExecutionProvider' in roop.globals.execution_providers:
+    elif 'CoreMLExecutionProvider' in roop.globals.execution_providers:
         return 'mps'
-    if 'TensorrtExecutionProvider' in roop.globals.execution_providers:
+    elif 'TensorrtExecutionProvider' in roop.globals.execution_providers:
         return 'tensort'
     return 'cpu'
 
@@ -40,6 +42,9 @@ def get_device() -> str:
 def clear_face_enhancer() -> None:
     global FACE_ENHANCER
 
+    if FACE_ENHANCER:
+        del FACE_ENHANCER
+        torch.cuda.empty_cache()
     FACE_ENHANCER = None
 
 
